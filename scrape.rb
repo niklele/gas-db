@@ -4,13 +4,18 @@ require 'nokogiri'
 require 'dotenv/load'
 require 'date'
 require 'time'
+require 'sequel'
+
+DB = Sequel.connect(ENV['DATABASE_URL'])
+
+# TODO build stations so that foreign key constraint is met
 
 sunnyvaleHtml = HTTParty.get('http://www.sanfrangasprices.com/GasPriceSearch.aspx?fuel=A&typ=adv&srch=1&state=CA&area=Sunnyvale&site=SanFran,SanJose,California&tme_limit=4')
 
 sunyvale = Nokogiri::HTML(sunnyvaleHtml)
 rows = sunyvale.xpath('//*[@id="pp_table"]/table/tbody/tr')
 
-recorded = Time.now
+collected = Time.now
 
 rows.each { |row|
     data = Hash.new('')
@@ -26,5 +31,10 @@ rows.each { |row|
     data[:user] = row.css('.mem').text
     data[:reported] = DateTime.parse(row.css('.tm')[0]['title']).to_time
 
-    puts data
+    DB[:prices].insert(:station_id => data[:station_id],
+                       :collected => collected,
+                       :reported => data[:reported],
+                       :type => 'regular',
+                       :price => data[:price],
+                       :user => data[:user])
 }

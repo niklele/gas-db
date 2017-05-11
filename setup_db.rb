@@ -22,7 +22,7 @@ if !DB.table_exists?(:prices)
         foreign_key :station_id, :stations
         Time :collected
         Time :reported
-        Integer :type
+        String :type
         Float :price
         String :user
         unique [:station_id, :collected, :reported, :type, :price, :user]
