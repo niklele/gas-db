@@ -2,23 +2,29 @@ require 'delegate'
 require 'HTTParty'
 require 'nokogiri'
 require 'dotenv/load'
+require 'date'
+require 'time'
 
 sunnyvaleHtml = HTTParty.get('http://www.sanfrangasprices.com/GasPriceSearch.aspx?fuel=A&typ=adv&srch=1&state=CA&area=Sunnyvale&site=SanFran,SanJose,California&tme_limit=4')
 
 sunyvale = Nokogiri::HTML(sunnyvaleHtml)
 rows = sunyvale.xpath('//*[@id="pp_table"]/table/tbody/tr')
 
-data = Hash.new('')
+recorded = Time.now
 
-p_price = rows[0].css('.p_price')
-data[:price] = Float(p_price.text)
-data[:station_id] = Integer(p_price[0]['id'].split('_').last)
+rows.each { |row|
+    data = Hash.new('')
 
-address = rows[0].css('.address')
-data[:name] = address.css('a').text
-data[:address] = address.css('dd').text.strip
+    p_price = row.css('.p_price')
+    data[:price] = Float(p_price.text)
+    data[:station_id] = Integer(p_price[0]['id'].split('_').last)
 
-data[:user] = rows[0].css('.mem').text
-data[:reported] = rows[0].css('.tm')[0]['title']
+    address = row.css('.address')
+    data[:name] = address.css('a').text
+    data[:address] = address.css('dd').text.strip
 
-puts data
+    data[:user] = row.css('.mem').text
+    data[:reported] = DateTime.parse(row.css('.tm')[0]['title']).to_time
+
+    puts data
+}
