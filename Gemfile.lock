@@ -1,0 +1,28 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    dotenv (2.2.1)
+    mini_portile2 (2.1.0)
+    nokogiri (1.7.2-x86-mingw32)
+      mini_portile2 (~> 2.1.0)
+    power_assert (1.0.2)
+    rake (12.0.0)
+    sequel (4.46.0)
+    test-unit (3.2.3)
+      power_assert
+
+PLATFORMS
+  x86-mingw32
+
+DEPENDENCIES
+  dotenv
+  nokogiri
+  rake
+  sequel
+  test-unit
+
+RUBY VERSION
+   ruby 2.2.6p396
+
+BUNDLED WITH
+   1.14.6
