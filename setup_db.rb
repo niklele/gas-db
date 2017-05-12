@@ -8,6 +8,7 @@ if !DB.table_exists?(:stations)
     puts 'creating stations table'
     DB.create_table :stations do
         Integer :station_id, :primary_key => true
+        String :location
         String :name
         String :address
         String :phone
