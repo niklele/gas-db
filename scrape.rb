@@ -1,5 +1,4 @@
-require 'delegate'
-require 'HTTParty'
+require 'open-uri'
 require 'nokogiri'
 require 'dotenv/load'
 require 'date'
@@ -36,7 +35,7 @@ def parseStation(name, location, station_id)
 
     url = URI.escape("http://www.sanfrangasprices.com/#{name}_Gas_Stations/#{location}/#{station_id}/index.aspx")
 
-    page = Nokogiri::HTML(HTTParty.get(url))
+    page = Nokogiri::HTML(open(url))
 
     info = page.xpath('//*[@id="spa_cont"]/div[1]/dl')
 
@@ -76,7 +75,7 @@ def parseLocation(location, fuel)
 
     url = URI.escape("http://www.sanfrangasprices.com/GasPriceSearch.aspx?fuel=#{type}&typ=adv&srch=1&state=CA&area=#{location}&site=SanFran,SanJose,California&tme_limit=4")
 
-    page = Nokogiri::HTML(HTTParty.get(url))
+    page = Nokogiri::HTML(open(url))
     rows = page.xpath('//*[@id="pp_table"]/table/tbody/tr')
 
     collected = Time.now
