@@ -26,6 +26,7 @@ if !DB.table_exists?(:prices)
         String :type
         Float :price
         String :user
-        unique [:station_id, :collected, :reported, :type, :price, :user]
+        # not unique on time collected so that we only get updated prices
+        unique [:station_id, :reported, :type, :price, :user]
     end
 end
