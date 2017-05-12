@@ -3,7 +3,7 @@ task :setup_db do
 	ruby 'setup_db.rb'
 end
 
-task 'teardown db tables'
+desc 'teardown db tables'
 task :teardown_db do
 	ruby 'teardown_db.rb'
 end
