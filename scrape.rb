@@ -6,9 +6,6 @@ require 'time'
 require 'sequel'
 require 'uri'
 
-# stations that can't be parsed properly bc of a problem on the website
-$blacklist_stations = [4068]
-
 $fuel_type = {
     'regular' => 'A',
     'midgrade' => 'B',
@@ -43,7 +40,7 @@ def parseStation(name, location, station_id)
 
     data[:name] = info.css('dt').text.strip
 
-    address, phone = info.css('dd').text.split(/[Pp]hone:/)
+    address, phone = info.css('dd').text.split(/phone:/i)
     data[:address] = address.strip
 
     if phone.nil?
@@ -81,16 +78,21 @@ def parseLocation(location, fuel)
     collected = Time.now
 
     rows.each { |row|
+
+        if row.css('.address').css('a').first['href'].match(/redirect/i)
+            puts "skipping station with a redirect"
+            next
+        end
+
         data = Hash.new('')
 
         p_price = row.css('.p_price')
         data[:price] = Float(p_price.text)
         data[:station_id] = Integer(p_price[0]['id'].split('_').last)
 
-        if $blacklist_stations.include? data[:station_id]
-            puts "skipping blacklisted station #{data[:station_id]}"
-            next
-        end
+        address = row.css('.address')
+        data[:name] = address.css('a').text.strip
+        data[:address] = address.css('dd').text.strip
 
         address = row.css('.address')
         data[:name] = address.css('a').text.strip
@@ -106,6 +108,10 @@ def parseLocation(location, fuel)
             DB.transaction do
                 if (DB[:stations].where(:station_id => data[:station_id]).count < 1)
                     noStation = true
+
+                    # rate limiting
+                    sleep(1)
+                    
                     parseStation(data[:name], location, data[:station_id])
                 end
 
