@@ -110,8 +110,8 @@ def parseLocation(location, fuel)
                     noStation = true
 
                     # rate limiting
-                    sleep(1)
-                    
+                    sleep(0.5)
+
                     parseStation(data[:name], location, data[:station_id])
                 end
 
@@ -140,6 +140,6 @@ $locations.each { |loc|
         parseLocation(loc, fuel)
 
         # rate limiting
-        sleep(1)
+        sleep(0.5)
     }
 }
