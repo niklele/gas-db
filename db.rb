@@ -22,9 +22,11 @@ class GasDB
 
         oldest = DB['select * from prices order by reported asc limit 1'].first[:reported]
         newest = DB['select * from prices order by reported desc limit 1'].first[:reported]
+        diff = Time.at(newest - oldest).utc.strftime("%T")
 
         puts "oldest price reported at #{oldest}"
         puts "newest price reported at #{newest}"
+        puts "time difference: #{diff}"
     end
 
     def self.copy()
