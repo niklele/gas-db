@@ -30,6 +30,9 @@ class GasDB
         puts "oldest price reported at #{oldest}"
         puts "newest price reported at #{newest}"
         puts "time difference: #{diff}"
+
+        csvFiles = DropboxClient::csvList()
+        puts "#{csvFiles.count} csv files in Dropbox"
     end
 
     def self.copy()
