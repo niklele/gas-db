@@ -15,6 +15,16 @@ task :summary do
     GasDB::summary()
 end
 
+desc 'copy prices data into a new table'
+task :copy do
+    GasDB::copy()
+end
+
+desc 'move prices data into a new table'
+task :move do
+    GasDB::move()
+end
+
 desc 'run scraper'
 task :scrape do
     ruby 'scrape.rb'
