@@ -1,6 +1,8 @@
 require 'sequel'
 require 'pg'
+require 'csv'
 require 'dotenv/load'
+require './dropbox.rb'
 
 DB = Sequel.connect(ENV['DATABASE_URL'])
 
@@ -8,12 +10,13 @@ class GasDB
 
     def self.setup()
         create_stations()
-        create_prices(:prices)
+        create_prices()
     end
 
     def self.teardown()
-        prices_tables().each{ |t| teardown_table(t) }
+        teardown_table(:prices)
         teardown_table(:stations)
+        delete_csv()
     end
 
     def self.summary()
@@ -30,12 +33,19 @@ class GasDB
     end
 
     def self.copy()
-        # count number of tables with 'prices' in the name
-        count = prices_tables().count
-        new_prices = "prices_#{count}"
-
-        puts "copying data from prices to #{new_prices}"
-        DB.run("select * into #{new_prices} from prices")
+        puts 'copying data from prices table to prices.csv'
+        prices = DB[:prices].all
+        CSV.open('prices.csv', 'w') do |csv|
+            csv << [:station_id, :collected, :reported, :type, :price, :user]
+            prices.each do |row|
+                csv << [row[:station_id],
+                        row[:collected],
+                        row[:reported],
+                        row[:type],
+                        row[:price],
+                        row[:user]]
+            end
+        end
     end
 
     def self.move()
@@ -44,15 +54,13 @@ class GasDB
         DB['delete from prices'].delete
     end
 
-    private
-
-    def self.prices_tables()
-        table_query = "select table_name from information_schema.tables "\
-                      "where table_schema='public' and table_type='BASE TABLE' "\
-                      "and table_name like 'prices%'"
-
-        return DB[table_query].map{ |e| e[:table_name] }
+    def self.dropbox_move()
+        move()
+        DropboxClient::uploadPrices()
+        delete_csv()
     end
+
+    private
 
     def self.create_stations()
         if !DB.table_exists?(:stations)
@@ -69,10 +77,10 @@ class GasDB
         end
     end
 
-    def self.create_prices(t_name)
-        if !DB.table_exists?(t_name)
-            puts "creating #{t_name} table"
-            DB.create_table t_name do
+    def self.create_prices()
+        if !DB.table_exists?(:prices)
+            puts 'creating :prices table'
+            DB.create_table :prices do
                 foreign_key :station_id, :stations
                 Time :collected
                 Time :reported
@@ -90,6 +98,11 @@ class GasDB
             puts "tearing down #{t_name} table"
             DB.drop_table(t_name)
         end
+    end
+
+    def self.delete_csv()
+        puts 'deleting all csv files'
+        Dir.glob("#{Dir.pwd}/*.csv").each { |file| File.delete(file) }
     end
 
 end

@@ -77,7 +77,7 @@ def parseLocation(location, fuel)
 
     collected = Time.now
 
-    rows.each { |row|
+    rows.each do |row|
 
         if row.css('.address').css('a').first['href'].match(/redirect/i)
             puts "skipping station with a redirect"
@@ -130,16 +130,16 @@ def parseLocation(location, fuel)
             end
 
         end
-    }
+    end
 
 end
 
-$locations.each { |loc|
-    $fuel_type.keys.each { |fuel|
+$locations.each do |loc|
+    $fuel_type.keys.each do |fuel|
 
         parseLocation(loc, fuel)
 
         # rate limiting
         sleep(0.5)
-    }
-}
+    end
+end
