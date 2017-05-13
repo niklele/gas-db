@@ -1,19 +1,21 @@
+require './db.rb'
+
 desc 'create db tables'
-task :setup_db do
-	ruby 'setup_db.rb'
+task :setup do
+    GasDB::setup()
 end
 
 desc 'teardown db tables'
-task :teardown_db do
-	ruby 'teardown_db.rb'
+task :teardown do
+    GasDB::teardown()
+end
+
+desc 'print db summary info'
+task :summary do
+    GasDB::summary()
 end
 
 desc 'run scraper'
 task :scrape do
     ruby 'scrape.rb'
-end
-
-desc 'print db summary info'
-task :summary do
-	ruby 'summary.rb'
 end

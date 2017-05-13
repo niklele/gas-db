@@ -5,10 +5,14 @@ build a DB of gasoline prices from the web
 
 1. Install postgresql however you would like
 2. `bundle install`
-3. `bundle exec rake setup_db` creates db tables
+3. `bundle exec rake setup` creates db tables
 
 ## Usage
-`bundle exec rake scrape`
+1. `bundle exec rake scrape` to scrape for info
+2. `bundle exec rake summary` for summary stats
 
 ## Cleanup
-`bundle exec rake teardown_db` deletes all tables and data
+`bundle exec rake teardown` deletes all tables and data
+
+## License
+MIT License
