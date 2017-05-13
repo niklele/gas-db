@@ -12,3 +12,8 @@ desc 'run scraper'
 task :scrape do
     ruby 'scrape.rb'
 end
+
+desc 'print db summary info'
+task :summary do
+	ruby 'summary.rb'
+end
