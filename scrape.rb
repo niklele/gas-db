@@ -14,15 +14,41 @@ $fuel_type = {
 }
 
 $locations = ['Atherton',
+              'Belmont',
+              'Broadmoor',
+              'Burbank',
+              'Burlingame',
+              'Campbell',
+              'Colma',
               'Cupertino',
+              'Daly City',
               'East Palo Alto',
+              'Foster City',
+              'Gilroy',
+              'Half Moon Bay',
+              'Hillsborough',
+              'Lexington Hills',
               'Los Altos',
+              'Los Gatos',
               'Menlo Park',
+              'Millbrae',
+              'Montara',
+              'Monte Sereno',
+              'Morgan Hill',
+              'Moss Beach',
               'Mountain View',
+              'Pacifica',
               'Palo Alto',
+              'Portola Valley',
+              'Redwood City',
+              'San Bruno',
+              'San Carlos',
+              'San Mateo',
               'Santa Clara',
               'Saratoga',
-              'Sunnyvale']
+              'South San Francisco',
+              'Sunnyvale',
+              'Woodside']
 
 DB = Sequel.connect(ENV['DATABASE_URL'])
 
@@ -30,6 +56,8 @@ def parseStation(name, location, station_id)
 
     puts "scraping #{name} station in #{location} with id #{station_id}"
 
+    location = location.gsub('Redwood City', 'Redwood_City')
+    name = name.gsub(/ & /, '_-and-_')
     url = URI.escape("http://www.sanfrangasprices.com/#{name}_Gas_Stations/#{location}/#{station_id}/index.aspx")
 
     page = Nokogiri::HTML(open(url))
@@ -39,7 +67,6 @@ def parseStation(name, location, station_id)
     data = Hash.new('')
 
     data[:name] = info.css('dt').text.strip
-
     address, phone = info.css('dd').text.split(/phone:/i)
     data[:address] = address.strip
 
@@ -81,6 +108,11 @@ def parseLocation(location, fuel)
 
         if row.css('.address').css('a').first['href'].match(/redirect/i)
             puts "skipping station with a redirect"
+            next
+        end
+
+        if row.css('.address').css('a').first['href'].match(/FUEL/)
+            puts "skipping FUEL 24:7 station with a bad URL"
             next
         end
 
@@ -133,6 +165,7 @@ def parseLocation(location, fuel)
     end
 
 end
+
 
 $locations.each do |loc|
     $fuel_type.keys.each do |fuel|

@@ -82,7 +82,7 @@ class GasDB
 
     def self.create_prices()
         if !DB.table_exists?(:prices)
-            puts 'creating :prices table'
+            puts 'creating prices table'
             DB.create_table :prices do
                 foreign_key :station_id, :stations
                 Time :collected
