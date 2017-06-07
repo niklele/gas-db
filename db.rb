@@ -8,18 +8,18 @@ DB = Sequel.connect(ENV['DATABASE_URL'])
 
 class GasDB
 
-    def self.setup()
-        create_stations()
-        create_prices()
+    def self.setup
+        create_stations
+        create_prices
     end
 
-    def self.teardown()
+    def self.teardown
         teardown_table(:prices)
         teardown_table(:stations)
-        delete_csv()
+        delete_csv
     end
 
-    def self.summary()
+    def self.summary
         puts "#{DB[:stations].count} stations"
         puts "#{DB[:prices].count} prices"
 
@@ -31,11 +31,11 @@ class GasDB
         puts "newest price reported at #{newest}"
         puts "time difference: #{diff}"
 
-        csvFiles = DropboxClient::csvList()
+        csvFiles = Dropbox.prices_list
         puts "#{csvFiles.count} csv files in Dropbox"
     end
 
-    def self.copy()
+    def self.copy
         puts 'copying data from prices table to prices.csv'
         prices = DB[:prices].all
         CSV.open('prices.csv', 'w') do |csv|
@@ -51,21 +51,21 @@ class GasDB
         end
     end
 
-    def self.move()
-        copy()
+    def self.move
+        copy
         puts 'deleting data from prices'
         DB['delete from prices'].delete
     end
 
-    def self.dropbox_move()
-        move()
-        DropboxClient::uploadPrices()
-        delete_csv()
+    def self.dropbox_move
+        move
+        Dropbox.upload_prices
+        delete_csv
     end
 
     private
 
-    def self.create_stations()
+    def self.create_stations
         if !DB.table_exists?(:stations)
             puts 'creating stations table'
             DB.create_table :stations do
@@ -80,7 +80,7 @@ class GasDB
         end
     end
 
-    def self.create_prices()
+    def self.create_prices
         if !DB.table_exists?(:prices)
             puts 'creating prices table'
             DB.create_table :prices do
@@ -103,7 +103,7 @@ class GasDB
         end
     end
 
-    def self.delete_csv()
+    def self.delete_csv
         puts 'deleting all csv files'
         Dir.glob("#{Dir.pwd}/*.csv").each { |file| File.delete(file) }
     end

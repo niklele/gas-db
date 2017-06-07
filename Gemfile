@@ -6,6 +6,6 @@ gem 'dotenv'
 gem 'nokogiri'
 gem 'sequel'
 gem 'pg'
-gem 'dropbox-api'
+gem 'dropbox_api'
 
-ruby '2.2.6'
+ruby '2.3.3'

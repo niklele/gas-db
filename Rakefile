@@ -1,7 +1,3 @@
-require "dropbox-api"
-require "dropbox-api/tasks"
-Dropbox::API::Tasks.install
-
 require './db.rb'
 
 desc 'create db tables'
