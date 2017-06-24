@@ -76,6 +76,10 @@ def parseStation(name, location, station_id)
         data[:phone] = phone.strip
     end
 
+    mapLink = page.xpath('//*[@id="spa_cont"]/div[1]/div[1]/a')[0]['href']
+    data[:lat] = Float(mapLink.match(/lat=(-?\d+.\d+)/).captures[0])
+    data[:long] = Float(mapLink.match(/long=(-?\d+.\d+)/).captures[0])
+
     puts data
 
     begin
@@ -84,6 +88,8 @@ def parseStation(name, location, station_id)
                              :name => data[:name],
                              :address => data[:address],
                              :phone => data[:phone])
+
+        # TODO put lat, long into db
     rescue => e
         puts e
         # nothing
@@ -136,15 +142,18 @@ def parseLocation(location, fuel)
         puts data
 
         noStation = false
+        tries = 0
         begin
             DB.transaction do
                 if (DB[:stations].where(:station_id => data[:station_id]).count < 1)
                     noStation = true
+                    tries += 1
 
                     # rate limiting
                     sleep(0.5)
 
                     parseStation(data[:name], location, data[:station_id])
+                    
                 end
 
                 DB[:prices].insert(:station_id => data[:station_id],
@@ -157,7 +166,9 @@ def parseLocation(location, fuel)
 
         rescue => e
             puts e
-            if noStation
+            if tries > 0
+                next
+            elsif noStation
                 retry
             end
 
@@ -165,7 +176,6 @@ def parseLocation(location, fuel)
     end
 
 end
-
 
 $locations.each do |loc|
     $fuel_type.keys.each do |fuel|
