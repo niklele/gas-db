@@ -7,5 +7,3 @@ gem 'nokogiri'
 gem 'sequel'
 gem 'pg'
 gem 'dropbox_api'
-
-ruby '2.3.3'
