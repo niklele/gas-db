@@ -3,7 +3,8 @@ require './bigquery.rb'
 
 desc 'create BigQuery tables'
 task :setup do
-    BigQuery.create_station_prices
+    BigQuery.create_stations
+    BigQuery.create_prices
 end
 
 desc 'delete BigQuery data'
@@ -11,7 +12,8 @@ task :delete do
     STDOUT.puts "WARNING This will delete all BigQuery data. Do you wish to continue? (Y/N)"
     input = STDIN.gets.strip
     if input.match /y/i
-        BigQuery.delete_station_prices
+        BigQuery.delete_stations
+        BigQuery.delete_prices
     end
 end
 

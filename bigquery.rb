@@ -1,60 +1,80 @@
 require "dotenv/load"
 require "google/cloud/bigquery"
 
-$fuel_type = [
-    'regular',
-    'midgrade',
-    'premium',
-    'diesel'
-]
-
 class BigQuery
 
   @client = Google::Cloud::Bigquery.new
   @dataset = @client.dataset "gasdb"
 
-  # separate each type of fuel into different tables
-  # denormalize using repeated values for prices
-  def self.create_station_prices
-
-    $fuel_type.each do |type|
-      puts "creating table #{type}_station_prices"
-
-      begin
-        table = @dataset.create_table "#{type}_station_prices" do |schema|
-          schema.integer "station_id", mode: :required
-          schema.string "location", mode: :required
-          schema.string "name", mode: :required
-          schema.string "address", mode: :nullable
-          schema.string "phone", mode: :nullable
-          schema.float "latitude", mode: :required
-          schema.float "longitude", mode: :required
-
-          schema.record "prices", mode: :repeated do |prices_schema|
-            prices_schema.timestamp "collected", mode: :required
-            prices_schema.timestamp "reported", mode: :required
-            prices_schema.float "price", mode: :required
-            prices_schema.string "user", mode: :required
-          end
-        end
-        table.description = "#{type} fuel prices at each station"
-      rescue Exception => e
-        puts "Error: #{e}"
+  def self.create_stations
+    puts "creating table: 'stations'"
+    begin
+      table = @dataset.create_table "stations" do |schema|
+        schema.integer "station_id", mode: :required
+        schema.string "location", mode: :required
+        schema.string "name", mode: :required
+        schema.string "address", mode: :nullable
+        schema.string "phone", mode: :nullable
+        schema.float "latitude", mode: :required
+        schema.float "longitude", mode: :required
+        schema.string "url", mode: :required
       end
+      table.description = "information about each station"
+    rescue Exception => e
+      puts "Error: #{e}"
     end
   end
 
-  def self.delete_station_prices
-    $fuel_type.each do |type|
-      begin
-        puts "Deleting table #{type}_station_prices"
-        table = @dataset.table "#{type}_station_prices"
-        table.delete
-      rescue Exception => e
-        puts "Error: #{e}"
+  def self.create_prices
+    puts "creating table: 'prices'"
+    begin
+      table = @dataset.create_table "prices" do |schema|
+        schema.timestamp "collected", mode: :required
+        schema.timestamp "reported", mode: :required
+        schema.integer "station_id", mode: :required
+        schema.float "price", mode: :required
+        schema.string "type", mode: :required
+        schema.string "user", mode: :required
       end
+      table.description = "fuel prices for all stations"
+    rescue Exception => e
+      puts "Error: #{e}"
     end
+  end
+
+  def self.delete_stations
+    begin
+      puts "Deleting table: 'stations'"
+      table = @dataset.table "stations"
+      table.delete
+    rescue Exception => e
+      puts "Error: #{e}"
+    end
+  end
+
+  def self.delete_prices
+    begin
+      puts "Deleting table: 'prices'"
+      table = @dataset.table "prices"
+      table.delete
+    rescue Exception => e
+      puts "Error: #{e}"
+    end
+  end
+
+  def self.stations
+    return @dataset.table "stations"
+  end
+
+  def self.prices
+    return @dataset.table "prices"
+  end
+
+  # checks whether a given station is in the table
+  def self.has_station?(station_id)
+    count_sql = "select count(*) from #{self.stations.query_id} where station_id = #{station_id}"
+    res = @client.query count_sql
+    return (res.first.values.first >= 1)
   end
 
 end
-
