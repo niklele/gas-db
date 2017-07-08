@@ -3,8 +3,8 @@ require 'nokogiri'
 require 'dotenv/load'
 require 'date'
 require 'time'
-require 'sequel'
 require 'uri'
+require './bigquery'
 
 $fuel_type = {
   'regular' => 'A',
@@ -50,8 +50,6 @@ $locations = ['Atherton',
               'Sunnyvale',
               'Woodside']
 
-DB = Sequel.connect(ENV['DATABASE_URL'])
-
 def parseStation(name, location, station_id)
 
   puts "scraping #{name} station in #{location} with id #{station_id}"
@@ -64,35 +62,31 @@ def parseStation(name, location, station_id)
 
   info = page.xpath('//*[@id="spa_cont"]/div[1]/dl')
 
-  data = Hash.new('')
+  station_data = Hash.new('')
+  station_data[:station_id] = station_id
+  station_data[:location] = location
+  station_data[:url] = url
 
-  data[:name] = info.css('dt').text.strip
+  station_data[:name] = info.css('dt').text.strip
   address, phone = info.css('dd').text.split(/phone:/i)
-  data[:address] = address.strip
+  station_data[:address] = address.strip
 
   if phone.nil?
-    data[:phone] = ''
+    station_data[:phone] = ''
   else
-    data[:phone] = phone.strip
+    station_data[:phone] = phone.strip
   end
 
   mapLink = page.xpath('//*[@id="spa_cont"]/div[1]/div[1]/a')[0]['href']
-  data[:lat] = Float(mapLink.match(/lat=(-?\d+.\d+)/).captures[0])
-  data[:long] = Float(mapLink.match(/long=(-?\d+.\d+)/).captures[0])
+  station_data[:latitude] = Float(mapLink.match(/lat=(-?\d+.\d+)/).captures[0])
+  station_data[:longitude] = Float(mapLink.match(/long=(-?\d+.\d+)/).captures[0])
 
-  puts data
+  puts station_data
 
   begin
-    DB[:stations].insert(:station_id => station_id,
-                         :location => location,
-                         :name => data[:name],
-                         :address => data[:address],
-                         :phone => data[:phone])
-
-    # TODO put lat, long into db
+    BigQuery.stations.insert station_data
   rescue => e
-    puts e
-    # nothing
+    puts "Error: #{e}"
   end
 
 end
@@ -122,67 +116,43 @@ def parseLocation(location, fuel)
       next
     end
 
-    data = Hash.new('')
+    price_data = Hash.new('')
+    price_data[:collected] = collected
+    price_data[:type] = fuel
 
     p_price = row.css('.p_price')
-    data[:price] = Float(p_price.text)
-    data[:station_id] = Integer(p_price[0]['id'].split('_').last)
+    price_data[:price] = Float(p_price.text)
+    price_data[:station_id] = Integer(p_price[0]['id'].split('_').last)
 
     address = row.css('.address')
-    data[:name] = address.css('a').text.strip
-    data[:address] = address.css('dd').text.strip
+    station_name = address.css('a').text.strip
+    # station_address = address.css('dd').text.strip
 
-    address = row.css('.address')
-    data[:name] = address.css('a').text.strip
-    data[:address] = address.css('dd').text.strip
+    price_data[:user] = row.css('.mem').text.strip
+    price_data[:reported] = DateTime.parse(row.css('.tm')[0]['title']).to_time
 
-    data[:user] = row.css('.mem').text.strip
-    data[:reported] = DateTime.parse(row.css('.tm')[0]['title']).to_time
+    puts price_data
 
-    puts data
-
-    noStation = false
-    tries = 0
+    # insert price record
     begin
-      DB.transaction do
-        if (DB[:stations].where(:station_id => data[:station_id]).count < 1)
-          noStation = true
-          tries += 1
-
-          # rate limiting
-          sleep(0.5)
-
-          parseStation(data[:name], location, data[:station_id])
-            
-        end
-
-        DB[:prices].insert(:station_id => data[:station_id],
-                           :collected => collected,
-                           :reported => data[:reported],
-                           :type => fuel, # real name not A/B/C/D
-                           :price => data[:price],
-                           :user => data[:user])
-      end
-
+      BigQuery.prices.insert price_data
     rescue => e
-      puts e
-      if tries > 0
-        next
-      elsif noStation
-        retry
-      end
-
+      puts "Error: #{e}"
     end
+
+    # scrape station if it isn't in the table
+    if not BigQuery.has_station? price_data[:station_id]
+      sleep(0.5) # rate limiting
+      parseStation(station_name, location, price_data[:station_id])
+    end
+
   end
 
 end
 
 $locations.each do |loc|
   $fuel_type.keys.each do |fuel|
-
     parseLocation(loc, fuel)
-
-    # rate limiting
-    sleep(0.5)
+    sleep(0.5) # rate limiting
   end
 end
