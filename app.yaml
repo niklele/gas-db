@@ -1,0 +1,10 @@
+runtime: ruby
+env: flex
+service: scraper
+entrypoint: bundle exec ruby app.rb -p $PORT
+# handlers:
+#   - url: /scrape
+#     login: admin
+skip_files:
+  - .*
+  - secrets/
