@@ -1,5 +1,7 @@
 # require './db.rb'
+require 'json'
 require './bigquery.rb'
+require './scraper.rb'
 
 desc 'create BigQuery tables'
 task :setup do
@@ -39,5 +41,6 @@ end
 
 desc 'run scraper'
 task :scrape do
-    ruby 'scrape.rb'
+    locations = JSON.parse(File.read('locations.json'))["locations"]
+    Scraper.scrape(locations)
 end
