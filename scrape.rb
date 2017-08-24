@@ -6,183 +6,149 @@ require 'time'
 require 'sequel'
 require 'uri'
 
-$fuel_type = {
-    'regular' => 'A',
-    'midgrade' => 'B',
-    'premium' => 'C',
-    'diesel' => 'D'
-}
-
-$locations = ['Atherton',
-              'Belmont',
-              'Broadmoor',
-              'Burbank',
-              'Burlingame',
-              'Campbell',
-              'Colma',
-              'Cupertino',
-              'Daly City',
-              'East Palo Alto',
-              'Foster City',
-              'Gilroy',
-              'Half Moon Bay',
-              'Hillsborough',
-              'Lexington Hills',
-              'Los Altos',
-              'Los Gatos',
-              'Menlo Park',
-              'Millbrae',
-              'Montara',
-              'Monte Sereno',
-              'Morgan Hill',
-              'Moss Beach',
-              'Mountain View',
-              'Pacifica',
-              'Palo Alto',
-              'Portola Valley',
-              'Redwood City',
-              'San Bruno',
-              'San Carlos',
-              'San Mateo',
-              'Santa Clara',
-              'Saratoga',
-              'South San Francisco',
-              'Sunnyvale',
-              'Woodside']
-
 DB = Sequel.connect(ENV['DATABASE_URL'])
 
-def parseStation(name, location, station_id)
+class Scraper
 
-    puts "scraping #{name} station in #{location} with id #{station_id}"
+  @fuel_type = {
+      'regular' => 'A',
+      'midgrade' => 'B',
+      'premium' => 'C',
+      'diesel' => 'D'
+  }
 
-    location = location.gsub('Redwood City', 'Redwood_City')
-    name = name.gsub(/ & /, '_-and-_')
-    url = URI.escape("http://www.sanfrangasprices.com/#{name}_Gas_Stations/#{location}/#{station_id}/index.aspx")
+  def self.parseStation(name, location, station_id)
 
-    page = Nokogiri::HTML(open(url))
+      puts "scraping #{name} station in #{location} with id #{station_id}"
 
-    info = page.xpath('//*[@id="spa_cont"]/div[1]/dl')
+      location = location.gsub('Redwood City', 'Redwood_City')
+      name = name.gsub(/ & /, '_-and-_')
+      url = URI.escape("http://www.sanfrangasprices.com/#{name}_Gas_Stations/#{location}/#{station_id}/index.aspx")
 
-    data = Hash.new('')
+      page = Nokogiri::HTML(open(url))
 
-    data[:name] = info.css('dt').text.strip
-    address, phone = info.css('dd').text.split(/phone:/i)
-    data[:address] = address.strip
+      info = page.xpath('//*[@id="spa_cont"]/div[1]/dl')
 
-    if phone.nil?
-        data[:phone] = ''
-    else
-        data[:phone] = phone.strip
-    end
+      data = Hash.new('')
 
-    mapLink = page.xpath('//*[@id="spa_cont"]/div[1]/div[1]/a')[0]['href']
-    data[:lat] = Float(mapLink.match(/lat=(-?\d+.\d+)/).captures[0])
-    data[:long] = Float(mapLink.match(/long=(-?\d+.\d+)/).captures[0])
+      data[:name] = info.css('dt').text.strip
+      address, phone = info.css('dd').text.split(/phone:/i)
+      data[:address] = address.strip
 
-    puts data
+      if phone.nil?
+          data[:phone] = ''
+      else
+          data[:phone] = phone.strip
+      end
 
-    begin
-        DB[:stations].insert(:station_id => station_id,
-                             :location => location,
-                             :name => data[:name],
-                             :address => data[:address],
-                             :phone => data[:phone])
+      mapLink = page.xpath('//*[@id="spa_cont"]/div[1]/div[1]/a')[0]['href']
+      data[:lat] = Float(mapLink.match(/lat=(-?\d+.\d+)/).captures[0])
+      data[:long] = Float(mapLink.match(/long=(-?\d+.\d+)/).captures[0])
 
-        # TODO put lat, long into db
-    rescue => e
-        puts e
-        # nothing
-    end
+      puts data
 
-end
+      begin
+          DB[:stations].insert(:station_id => station_id,
+                               :location => location,
+                               :name => data[:name],
+                               :address => data[:address],
+                               :phone => data[:phone])
 
-def parseLocation(location, fuel)
+          # TODO put lat, long into db
+      rescue => e
+          puts e
+          # nothing
+      end
 
-    puts "scraping prices in #{location} for #{fuel} fuel"
+  end
 
-    type = $fuel_type[fuel]
+  def self.parseLocation(location, fuel)
 
-    url = URI.escape("http://www.sanfrangasprices.com/GasPriceSearch.aspx?fuel=#{type}&typ=adv&srch=1&state=CA&area=#{location}&site=SanFran,SanJose,California&tme_limit=4")
+      puts "scraping prices in #{location} for #{fuel} fuel"
 
-    page = Nokogiri::HTML(open(url))
-    rows = page.xpath('//*[@id="pp_table"]/table/tbody/tr')
+      type = @fuel_type[fuel]
 
-    collected = Time.now
+      url = URI.escape("http://www.sanfrangasprices.com/GasPriceSearch.aspx?fuel=#{type}&typ=adv&srch=1&state=CA&area=#{location}&site=SanFran,SanJose,California&tme_limit=4")
 
-    rows.each do |row|
+      page = Nokogiri::HTML(open(url))
+      rows = page.xpath('//*[@id="pp_table"]/table/tbody/tr')
 
-        if row.css('.address').css('a').first['href'].match(/redirect/i)
-            puts "skipping station with a redirect"
-            next
-        end
+      collected = Time.now
 
-        if row.css('.address').css('a').first['href'].match(/FUEL/)
-            puts "skipping FUEL 24:7 station with a bad URL"
-            next
-        end
+      rows.each do |row|
 
-        data = Hash.new('')
+          if row.css('.address').css('a').first['href'].match(/redirect/i)
+              puts "skipping station with a redirect"
+              next
+          end
 
-        p_price = row.css('.p_price')
-        data[:price] = Float(p_price.text)
-        data[:station_id] = Integer(p_price[0]['id'].split('_').last)
+          if row.css('.address').css('a').first['href'].match(/FUEL/)
+              puts "skipping FUEL 24:7 station with a bad URL"
+              next
+          end
 
-        address = row.css('.address')
-        data[:name] = address.css('a').text.strip
-        data[:address] = address.css('dd').text.strip
+          data = Hash.new('')
 
-        address = row.css('.address')
-        data[:name] = address.css('a').text.strip
-        data[:address] = address.css('dd').text.strip
+          p_price = row.css('.p_price')
+          data[:price] = Float(p_price.text)
+          data[:station_id] = Integer(p_price[0]['id'].split('_').last)
 
-        data[:user] = row.css('.mem').text.strip
-        data[:reported] = DateTime.parse(row.css('.tm')[0]['title']).to_time
+          address = row.css('.address')
+          data[:name] = address.css('a').text.strip
+          data[:address] = address.css('dd').text.strip
 
-        puts data
+          address = row.css('.address')
+          data[:name] = address.css('a').text.strip
+          data[:address] = address.css('dd').text.strip
 
-        noStation = false
-        tries = 0
-        begin
-            DB.transaction do
-                if (DB[:stations].where(:station_id => data[:station_id]).count < 1)
-                    noStation = true
-                    tries += 1
+          data[:user] = row.css('.mem').text.strip
+          data[:reported] = DateTime.parse(row.css('.tm')[0]['title']).to_time
 
-                    # rate limiting
-                    sleep(0.5)
+          puts data
 
-                    parseStation(data[:name], location, data[:station_id])
-                    
-                end
+          noStation = false
+          tries = 0
+          begin
+              DB.transaction do
+                  if (DB[:stations].where(:station_id => data[:station_id]).count < 1)
+                      noStation = true
+                      tries += 1
 
-                DB[:prices].insert(:station_id => data[:station_id],
-                                   :collected => collected,
-                                   :reported => data[:reported],
-                                   :type => fuel, # real name not A/B/C/D
-                                   :price => data[:price],
-                                   :user => data[:user])
-            end
+                      # rate limiting
+                      sleep(0.5)
 
-        rescue => e
-            puts e
-            if tries > 0
-                next
-            elsif noStation
-                retry
-            end
+                      parseStation(data[:name], location, data[:station_id])
+                      
+                  end
 
-        end
-    end
+                  DB[:prices].insert(:station_id => data[:station_id],
+                                     :collected => collected,
+                                     :reported => data[:reported],
+                                     :type => fuel, # real name not A/B/C/D
+                                     :price => data[:price],
+                                     :user => data[:user])
+              end
 
-end
+          rescue => e
+              puts e
+              if tries > 0
+                  next
+              elsif noStation
+                  retry
+              end
 
-$locations.each do |loc|
-    $fuel_type.keys.each do |fuel|
+          end
+      end
 
-        parseLocation(loc, fuel)
+  end
 
-        # rate limiting
-        sleep(0.5)
-    end
+  def self.scrape(locations)
+      locations.each do |loc|
+          @fuel_type.keys.each do |fuel|
+          parseLocation(loc, fuel)
+          sleep(0.5) # rate limiting
+          end
+      end
+  end
+
 end

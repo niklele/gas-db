@@ -1,3 +1,5 @@
+require 'json'
+require './scrape.rb'
 require './db.rb'
 
 desc 'create db tables'
@@ -32,5 +34,6 @@ end
 
 desc 'run scraper'
 task :scrape do
-    ruby 'scrape.rb'
+    locations = JSON.parse(File.read('locations.json'))["locations"]
+    Scraper.scrape(locations)
 end
