@@ -1,6 +1,8 @@
 GEM
   remote: https://rubygems.org/
   specs:
+    bson (4.2.2)
+    bson_ext (1.5.1)
     dotenv (2.2.1)
     dropbox_api (0.1.6)
       faraday (~> 0.9, ~> 0.8)
@@ -9,9 +11,12 @@ GEM
       multipart-post (>= 1.2, < 3)
     jwt (1.5.6)
     mini_portile2 (2.1.0)
+    mongo (2.4.3)
+      bson (>= 4.2.1, < 5.0.0)
     multi_json (1.12.1)
     multi_xml (0.6.0)
     multipart-post (2.0.0)
+    neatjson (0.8.3)
     nokogiri (1.7.2)
       mini_portile2 (~> 2.1.0)
     nokogiri (1.7.2-x86-mingw32)
@@ -36,8 +41,11 @@ PLATFORMS
   x86-mingw32
 
 DEPENDENCIES
+  bson_ext
   dotenv
   dropbox_api
+  mongo
+  neatjson
   nokogiri
   pg
   rake
