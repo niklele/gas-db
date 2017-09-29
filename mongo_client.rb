@@ -43,10 +43,13 @@ class MongoClient
       @client = use_local_client ? local_client : remote_client
       @db = @client.database
 
+      # index station_ids in prices
+      @db[:prices].indexes.create_one(station_id: Mongo::Index::ASCENDING)
+      # TODO indeces on reported, collected, price
+
     rescue Exception => err
       @logger.fatal { "MongoClient | #{err}".red }
     end
-
   end
 
   def print_all_stations
@@ -81,32 +84,53 @@ class MongoClient
   #   return ok
   # end
 
-  def add_station(station_id, data) # unique insert
-    # if station_exists? station_id
-    #   # TODO log this
-    #   puts "cannot add station: station #{station_id} already exists in the db"
-    #   return
-    # end
+  def add(collection, data)
+    # unique insert
     begin
-      @db[:stations].insert_one(data)
+      collection.insert_one(data)
     rescue Exception => err
-      # puts("Cannot add station: #{err}")
-      @logger.warn { "MongoClient | Cannot add station: #{err}".red }
+      @logger.warn { "MongoClient | Cannot add to #{collection.namespace} | #{err}".red }
     end
   end
 
-  def update_station(station_id, update)
+  def add_station(data) add(@db[:stations], data) end
+  def add_price(data) add(@db[:prices], data) end
+
+  def update(collection, id, update)
     # update is the mongo update statement
-    @db[:stations].find_one_and_update({ _id: station_id}, update)
+    begin
+      collection.find_one_and_update({ _id: id}, update)
+    rescue Exception => err
+      @logger.warn { "MongoClient | Cannot update #{collection.namespace} id: #{id} | #{err}".red }
+    end
   end
+
+  def update_station(id, update) update(@db[:stations], id, update) end
+  def update_price(id, update) update(@db[:prices], id, update) end
+
+  def delete(collection, id)
+    begin
+      collection.find_one_and_delete({ _id: id})
+    rescue Exception => err
+      @logger.warn { "MongoClient | Cannot delete #{collection.namespace} id: #{id} | #{err}".red }
+    end
+  end
+
+  def delete_station(id) delete(@db[:stations], id) end
+  def delete_price(id) delete(@db[:prices], id) end
 
   def set_station_working(station_id, working)
     # set 'working' var
     update_station(station_id, {"$set" => { working: working }})
   end
 
-  def delete_station(station_id)
-    @db[:stations].find_one_and_delete({ _id: station_id})
+  def lookup_station(price_id)
+    begin
+      priceDoc = @db[:prices].find( _id: price_id ).first
+      return @db[:stations].find( _id: priceDoc[:station_id] ).first
+    rescue Exception => err
+      @logger.warn { "MongoClient | Cannot lookup station for price with id: #{price_id} | #{err}".red }
+    end
   end
 
   def test_station
@@ -128,24 +152,45 @@ class MongoClient
     return testStation
   end
 
+  def test_price
+    testPrice = {
+      _id: 1, # TODO autoincrementing or ObjectID?
+      station_id: 999999999, # parent referencing
+      collected: Time.new(),
+      reported: Time.new(),
+      type: "regular",
+      price: 3.3,
+      user: "example_user",
+    }
+    return testPrice
+  end
+
 end
 
 
 MongoClient.open(true) do |mc|
 
-  mc.add_station(999999999, mc.test_station)
+  # TODO test with multiple price records
+
+  mc.add_station(mc.test_station)
   mc.print_all_stations
 
-  mc.add_station(999999999, mc.test_station)
-  mc.print_all_stations
+  mc.add_price(mc.test_price)
+  station = mc.lookup_station(1)
+  puts JSON.neat_generate(station).yellow
 
-  puts mc.station_exists? 999999999
+  # mc.add_station(mc.test_station)
+  # mc.print_all_stations
 
-  mc.set_station_working(999999999, false)
-  mc.print_all_stations
+  # puts mc.station_exists? 999999999
+
+  # mc.set_station_working(999999999, false)
+  # mc.print_all_stations
 
   mc.delete_station 999999999
   mc.print_all_stations
+
+  mc.delete_price 1
 
 end
 
