@@ -3,6 +3,7 @@ GEM
   specs:
     bson (4.2.2)
     bson_ext (1.5.1)
+    colorize (0.8.1)
     dotenv (2.2.1)
     dropbox_api (0.1.6)
       faraday (~> 0.9, ~> 0.8)
@@ -42,6 +43,7 @@ PLATFORMS
 
 DEPENDENCIES
   bson_ext
+  colorize
   dotenv
   dropbox_api
   mongo
