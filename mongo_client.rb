@@ -19,10 +19,6 @@ class MongoClient
      end
   end
 
-  def close
-    @client.close
-  end
-
   def local_client
     mongo_uri = ENV['LOCAL_MONGODB_URI']
     client = Mongo::Client.new([mongo_uri], :database => 'gasDB-test' );
@@ -38,6 +34,7 @@ class MongoClient
   def initialize(use_local_client=false)
     @logger = Logger.new(STDOUT)
     @logger.level = Logger::DEBUG
+    @logger.progname = 'MongoClient'
 
     begin
       @client = use_local_client ? local_client : remote_client
@@ -48,8 +45,12 @@ class MongoClient
       # TODO indeces on reported, collected, price
 
     rescue Exception => err
-      @logger.fatal { "MongoClient | #{err}".red }
+      @logger.fatal { "#{err}".red }
     end
+  end
+
+  def close
+    @client.close
   end
 
   def print_all_stations
@@ -84,40 +85,59 @@ class MongoClient
   #   return ok
   # end
 
-  def add(collection, data)
-    # unique insert
+  def insert(collection, data)
     begin
       collection.insert_one(data)
     rescue Exception => err
-      @logger.warn { "MongoClient | Cannot add to #{collection.namespace} | #{err}".red }
+      @logger.warn { "Cannot insert to #{collection.namespace} | #{err}".red }
     end
   end
 
-  def add_station(data) add(@db[:stations], data) end
-  def add_price(data) add(@db[:prices], data) end
+  def insert_many(collection, data)
+    begin
+      collection.insert_many(data)
+    rescue Exception => err
+      @logger.warn { "Cannot insert many to #{collection.namespace} | #{err}".red }
+    end
+  end
+
+  def insert_station(data) insert(@db[:stations], data) end
+  def insert_price(data) insert(@db[:prices], data) end
+  def insert_many_prices(data) insert_many(@db[:prices], data) end
 
   def update(collection, id, update)
     # update is the mongo update statement
     begin
       collection.find_one_and_update({ _id: id}, update)
     rescue Exception => err
-      @logger.warn { "MongoClient | Cannot update #{collection.namespace} id: #{id} | #{err}".red }
+      @logger.warn { "Cannot update #{collection.namespace} id: #{id} | #{err}".red }
     end
   end
 
   def update_station(id, update) update(@db[:stations], id, update) end
-  def update_price(id, update) update(@db[:prices], id, update) end
+  # def update_price(id, update) update(@db[:prices], id, update) end
 
   def delete(collection, id)
     begin
       collection.find_one_and_delete({ _id: id})
     rescue Exception => err
-      @logger.warn { "MongoClient | Cannot delete #{collection.namespace} id: #{id} | #{err}".red }
+      @logger.warn { "Cannot delete #{collection.namespace} id: #{id} | #{err}".red }
     end
   end
 
   def delete_station(id) delete(@db[:stations], id) end
   def delete_price(id) delete(@db[:prices], id) end
+
+  def delete_all(collection)
+    begin
+      collection.delete_many()
+    rescue Exception => err
+      @logger.warn { "Cannot delete all from #{collection.namespace} | #{err}".red }
+    end
+  end
+
+  def delete_all_stations() delete_all(@db[:stations]) end
+  def delete_all_prices() delete_all(@db[:prices]) end
 
   def set_station_working(station_id, working)
     # set 'working' var
@@ -129,7 +149,7 @@ class MongoClient
       priceDoc = @db[:prices].find( _id: price_id ).first
       return @db[:stations].find( _id: priceDoc[:station_id] ).first
     rescue Exception => err
-      @logger.warn { "MongoClient | Cannot lookup station for price with id: #{price_id} | #{err}".red }
+      @logger.warn { "Cannot lookup station for price with id: #{price_id} | #{err}".red }
     end
   end
 
@@ -167,30 +187,34 @@ class MongoClient
 
 end
 
+def test_mongo_client()
 
-MongoClient.open(true) do |mc|
+  MongoClient.open(true) do |mc|
 
-  # TODO test with multiple price records
+    # TODO test with multiple price records
 
-  mc.add_station(mc.test_station)
-  mc.print_all_stations
+    # mc.insert_station(mc.test_station)
+    # mc.print_all_stations
 
-  mc.add_price(mc.test_price)
-  station = mc.lookup_station(1)
-  puts JSON.neat_generate(station).yellow
+    # mc.insert_price(mc.test_price)
+    # station = mc.lookup_station(1)
+    # puts JSON.neat_generate(station).yellow
 
-  # mc.add_station(mc.test_station)
-  # mc.print_all_stations
+    # mc.insert_station(mc.test_station)
+    # mc.print_all_stations
 
-  # puts mc.station_exists? 999999999
+    # puts mc.station_exists? 999999999
 
-  # mc.set_station_working(999999999, false)
-  # mc.print_all_stations
+    # mc.set_station_working(999999999, false)
+    # mc.print_all_stations
 
-  mc.delete_station 999999999
-  mc.print_all_stations
+    # mc.delete_station 999999999
+    mc.print_all_stations
 
-  mc.delete_price 1
+    # mc.delete_price 1
 
+  end
 end
+
+# test_mongo_client()
 

@@ -48,7 +48,7 @@ class Scraper
     # TODO figure out how to cleanly put these in the db
   end
 
-  def self.parse_station(station_id)
+  def self.parse_station_details(station_id)
 
     @logger.info { "parsing station #{station_id}".yellow }
 
@@ -57,7 +57,8 @@ class Scraper
 
     data = {}
 
-    data[:name] = page.at_css('h2.station-name').text.strip # Valero
+    data[:_id] = station_id
+    data[:name] = page.at_css('h2.station-name').text.strip
     data[:phone] = page.at_css('div.station-phone').text.strip
 
     # TODO can i use this address even though it has the cross street?
@@ -74,35 +75,35 @@ class Scraper
       }
     end
 
-    # TODO put station in mongo
+    return data
+  end
 
-    # MongoClient.open(true) do |mc|
-    #   puts "test".green
-    # end
+  def self.parse_station_prices(station_id)
+    @logger.info { "parsing station #{station_id} for prices".yellow }
 
-    puts JSON.neat_generate(data).green
-
-    ### price ###
+    url = URI.escape("https://www.gasbuddy.com/Station/#{station_id}")
+    page = Nokogiri::HTML(open(url))
 
     price_boxes = page.xpath('//*[@id="prices"]/div/div')
 
-    # TODO mongo function to add multiple prices
-
-    prices = price_boxes.each do |box|
+    prices = []
+    price_boxes.each do |box|
 
       cash = self.parse_price_box(station_id, box, 'cash')
-      puts JSON.neat_generate(cash).blue
-
+      if cash
+        prices.push(cash)
+      end
+ 
       credit = self.parse_price_box(station_id, box, 'credit')
-      puts JSON.neat_generate(credit).blue
+      if credit
+        prices.push(credit)
+      end
     end
 
-    # TODO put each price as an individual document in mongo
+    # TODO return non-nulls in a better way
+    # can I make a 1:2 map nicely?
 
-    # TODO remove nulls
-
-    # puts JSON.neat_generate(prices).blue
-
+    return prices
   end
 
   def self.parse_price_box(station_id, type_box, payment_type)
@@ -128,11 +129,34 @@ class Scraper
 
   # TODO use a queue of station_ids to scrape
 
+  def self.parse_stations(stations)
+    MongoClient.open(true) do |mc| # local
+
+      stations.each do |sid|
+        station_details = self.parse_station_details(sid)
+
+        if mc.station_exists? sid
+          mc.update_station(sid, station_details)
+        else
+          mc.insert_station(station_details)
+        end
+
+        prices = self.parse_station_prices(sid)
+        mc.insert_many_prices( prices )
+
+        # puts JSON.neat_generate(prices).blue
+
+      end
+    end
+  end
+
 end
 
-Scraper.parse_station 12361
-Scraper.parse_station 5443
-Scraper.parse_station 5024
+Scraper.parse_stations([11236, 5443, 5024])
+
+# Scraper.parse_station 12361
+# Scraper.parse_station 5443
+# Scraper.parse_station 5024
 
 # puts Scraper.parse_nearby(37.380875, -122.074536)
 
