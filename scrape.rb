@@ -68,13 +68,15 @@ class Scraper
     data[:latitude] = page.at_css('meta[itemprop=latitude]')['content']
     data[:longitude] = page.at_css('meta[itemprop=longitude]')['content']
 
+    data[:rating] = page.at_css('meta[itemprop=ratingValue]')['content'].to_f
+    data[:rating_count] = page.at_css('div[itemprop=reviewCount] > span').text.to_i
+
     data[:features] = page.css('div.station-feature').map do |e|
       {
         :name => e['title'],
         :image_url => URI.escape(/'(.*)\?/.match(e['style'])[1]) # get just url
       }
     end
-
     return data
   end
 
@@ -86,22 +88,14 @@ class Scraper
 
     price_boxes = page.xpath('//*[@id="prices"]/div/div')
 
-    prices = []
-    price_boxes.each do |box|
-
-      cash = self.parse_price_box(station_id, box, 'cash')
-      if cash
-        prices.push(cash)
-      end
- 
-      credit = self.parse_price_box(station_id, box, 'credit')
-      if credit
-        prices.push(credit)
-      end
+    prices = price_boxes.flat_map do |box|
+      [self.parse_price_box(station_id, box, 'cash'),
+        self.parse_price_box(station_id, box, 'credit')]
     end
 
-    # TODO return non-nulls in a better way
-    # can I make a 1:2 map nicely?
+    # remove nil
+    prices = prices.compact()
+    # TODO return nulls in a better way
 
     return prices
   end
@@ -112,28 +106,44 @@ class Scraper
 
     # check that we have a real price and not just '---'
     if price > 0
-     
       return {
         :station_id => station_id,
         :fuel_type => type_box.at_css('h4.fuel-type.section-title').text.downcase,
         :payment_type => payment_type,
         :price => price,
-        :reported => box.at_css('div.price-time').text,
-        :user => box.at_css('span.memberId').text
-
-        # TODO collected time
+        :user => box.at_css('span.memberId').text,
+        :reported => box.at_css('div.price-time').text
       }
-      # TODO convert reported time to time object
     end
   end
 
-  # TODO use a queue of station_ids to scrape
+  def self.parse_time_ago(curr_time, time_ago)
+    # parse a string like "3m ago" to a Time object
+    t = time_ago.split(' ')[0]
+    prefix = t[0..-2].to_i
+    suffix = t[-1]
+    if suffix == 'm'
+      return curr_time - prefix
+    elsif suffix == 'h'
+      return curr_time - (prefix * 60)
+    elsif suffix == 'd'
+      return curr_time - (prefix * 1440) # 24 * 60
+    else
+      @logger.warn { "Error parsing time ago: #{time_ago}".red }
+      return curr_time
+    end
+  end
 
+
+  # TODO use a queue of station_ids to scrape
   def self.parse_stations(stations)
     MongoClient.open(true) do |mc| # local
 
+      t = Time.new
+
       stations.each do |sid|
         station_details = self.parse_station_details(sid)
+        # puts JSON.neat_generate(station_details).green
 
         if mc.station_exists? sid
           mc.update_station(sid, station_details)
@@ -142,8 +152,12 @@ class Scraper
         end
 
         prices = self.parse_station_prices(sid)
-        mc.insert_many_prices( prices )
+        prices.each do |p|
+          p[:collected] = t
+          p[:reported] = self.parse_time_ago(t, p[:reported])
+        end
 
+        mc.insert_many_prices( prices )
         # puts JSON.neat_generate(prices).blue
 
       end
@@ -152,7 +166,7 @@ class Scraper
 
 end
 
-Scraper.parse_stations([11236, 5443, 5024])
+# Scraper.parse_stations([11236, 5443, 5024])
 
 # Scraper.parse_station 12361
 # Scraper.parse_station 5443
