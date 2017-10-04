@@ -136,8 +136,8 @@ class Scraper
 
 
   # TODO use a queue of station_ids to scrape
-  def self.parse_stations(stations)
-    MongoClient.open(true) do |mc| # local
+  def self.parse_stations(use_local_db=false, stations)
+    MongoClient.open(use_local_db) do |mc|
 
       t = Time.new
 
@@ -166,7 +166,7 @@ class Scraper
 
 end
 
-# Scraper.parse_stations([11236, 5443, 5024])
+# Scraper.parse_stations(true, [11236, 5443, 5024])
 
 # Scraper.parse_station 12361
 # Scraper.parse_station 5443
