@@ -37,3 +37,8 @@ task :scrape do
   locations = JSON.parse(File.read('locations.json'))["locations"]
   Scraper.scrape(locations)
 end
+
+desc 'bootstrap stations'
+task :bootstrap do
+    ruby "bootstrap.rb"
+end

@@ -102,6 +102,7 @@ class MongoClient
   end
 
   def insert_station(data) insert(@db[:stations], data) end
+  def insert_bootstrap_station(data) insert(@db[:bootstrap_stations], data) end
   def insert_price(data) insert(@db[:prices], data) end
   def insert_many_prices(data) insert_many(@db[:prices], data) end
 

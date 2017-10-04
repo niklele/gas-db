@@ -10,6 +10,11 @@ GEM
       oauth2 (~> 1.1)
     faraday (0.11.0)
       multipart-post (>= 1.2, < 3)
+    google_maps_service (0.4.2)
+      hurley (~> 0.1)
+      multi_json (~> 1.11)
+      retriable (~> 2.0)
+    hurley (0.2)
     jwt (1.5.6)
     mini_portile2 (2.1.0)
     mongo (2.4.3)
@@ -33,6 +38,7 @@ GEM
     power_assert (1.0.2)
     rack (2.0.3)
     rake (12.0.0)
+    retriable (2.1.0)
     sequel (4.46.0)
     test-unit (3.2.3)
       power_assert
@@ -46,6 +52,7 @@ DEPENDENCIES
   colorize
   dotenv
   dropbox_api
+  google_maps_service
   mongo
   neatjson
   nokogiri
