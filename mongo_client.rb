@@ -53,6 +53,10 @@ class MongoClient
     @client.close
   end
 
+  def stations() return @db[:stations] end
+  def bootstrap_stations() return @db[:bootstrap_stations] end
+  def prices() return @db[:prices] end
+
   def print_all_stations
     stations = @db[:stations]
     result = stations.find()

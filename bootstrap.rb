@@ -49,42 +49,86 @@ def bootstrap_stations(coords)
   end
 end
 
-def find_address()
-  # This can be deferred to later
+# def find_address()
+#   # This can be deferred to later
 
-  gmaps = GoogleMapsService::Client.new(
-    key: ENV['GMAPS_KEY'],
-    retry_timeout: 20,
-    queries_per_second: 10
-  )
+#   gmaps = GoogleMapsService::Client.new(
+#     key: ENV['GMAPS_KEY'],
+#     retry_timeout: 20,
+#     queries_per_second: 10
+#   )
 
-  # Valero station 12361
-  coords = [37.416733, -122.1036]
+#   # Valero station 12361
+#   coords = [37.416733, -122.1036]
 
-  results = gmaps.reverse_geocode(coords)
+#   results = gmaps.reverse_geocode(coords)
 
-  # puts JSON.neat_generate(results[0]).green
+#   # puts JSON.neat_generate(results[0]).green
 
-  address = results[0][:formatted_address]
-  puts address
+#   address = results[0][:formatted_address]
+#   puts address
 
-end
+# end
 
-def bootstrap()
+def init_bootstrap_stations()
   # center = [37.4, -122.1]
-
   # coords = [37.297807, -122.541690] # pacific ocean
   coords = [37.55, -122.17] # middle of the bay
 
   # 0.33, -0.42 # max differences in lat/lng
-  radius = 0.1089 # lat/long units
-
+  radius = 0.1089 # lat/long deg
   n_samples = 500
 
   # puts JSON.neat_generate(random_coords(radius, n_samples))
-
-  coords = random_coords(coords[0], coords[1], radius, n_samples)
+  coords = random_coords(center_lat, center_lng, radius, n_samples)
   bootstrap_stations(coords)
 end
 
-bootstrap()
+
+def stations_from_bootstrap()
+  # go through bootstrap_stations and parse station for each
+
+  stations = []
+  MongoClient.open do |mc|
+    mc.bootstrap_stations.find.each do |doc|
+      stations << doc[:_id]
+    end
+  end
+
+  Scraper.parse_stations(stations)
+
+end
+
+
+def resample_bootstrap_stations()
+
+  locations = []
+  MongoClient.open do |mc|
+    mc.stations.find.each do |doc|
+      locations << [doc[:latitude], doc[:longitude]]
+    end
+  end
+
+  radius = 0.01 # lat/long deg
+  n_samples = 10
+
+  locations.each do |center_lat, center_lng|
+    center_lat = Float(center_lat)
+    center_lng = Float(center_lng)
+
+    coords = random_coords(center_lat, center_lng, radius, n_samples)
+    bootstrap_stations(coords)
+  end
+
+end
+
+####### 1
+# init_bootstrap_stations()
+
+####### 2
+# stations_from_bootstrap()
+
+####### 3
+# resample_bootstrap_stations()
+
+# Repeat 2 and 3
