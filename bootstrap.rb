@@ -49,7 +49,6 @@ def bootstrap_stations(coords)
   end
 end
 
-
 def find_address()
   # This can be deferred to later
 
