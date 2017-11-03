@@ -7,6 +7,7 @@ require 'uri'
 require 'logger'
 require 'colorize'
 require 'neatjson'
+require 'parallel'
 require './mongo_client.rb'
 
 class Scraper
@@ -68,8 +69,12 @@ class Scraper
     data[:latitude] = page.at_css('meta[itemprop=latitude]')['content']
     data[:longitude] = page.at_css('meta[itemprop=longitude]')['content']
 
-    data[:rating] = page.at_css('meta[itemprop=ratingValue]')['content'].to_f
-    data[:rating_count] = page.at_css('div[itemprop=reviewCount] > span').text.to_i
+    begin
+      data[:rating] = page.at_css('meta[itemprop=ratingValue]')['content'].to_f
+      data[:rating_count] = page.at_css('div[itemprop=reviewCount] > span').text.to_i
+    rescue Exception => err
+       @logger.warn { "Cannot get rating from #{station_id} | #{err}".red }
+    end
 
     data[:features] = page.css('div.station-feature').map do |e|
       {
@@ -136,12 +141,12 @@ class Scraper
 
 
   # TODO use a queue of station_ids to scrape
-  def self.parse_stations(use_local_db=false, stations)
+  def self.parse_stations(stations, use_local_db=false, parse_prices=true)
     MongoClient.open(use_local_db) do |mc|
 
       t = Time.new
 
-      stations.each do |sid|
+      Parallel.each(stations, in_threads: 8) do |sid|
         station_details = self.parse_station_details(sid)
         # puts JSON.neat_generate(station_details).green
 
@@ -151,14 +156,16 @@ class Scraper
           mc.insert_station(station_details)
         end
 
-        prices = self.parse_station_prices(sid)
-        prices.each do |p|
-          p[:collected] = t
-          p[:reported] = self.parse_time_ago(t, p[:reported])
-        end
+        if parse_prices
+          prices = self.parse_station_prices(sid)
+          prices.each do |p|
+            p[:collected] = t
+            p[:reported] = self.parse_time_ago(t, p[:reported])
+          end
 
-        mc.insert_many_prices( prices )
-        # puts JSON.neat_generate(prices).blue
+          mc.insert_many_prices( prices )
+          # puts JSON.neat_generate(prices).blue
+        end
 
       end
     end
@@ -166,11 +173,13 @@ class Scraper
 
 end
 
-# Scraper.parse_stations(true, [11236, 5443, 5024])
+# Scraper.parse_stations([11236, 5443, 5024], true, true)
 
 # Scraper.parse_station 12361
 # Scraper.parse_station 5443
 # Scraper.parse_station 5024
 
 # puts Scraper.parse_nearby(37.380875, -122.074536)
+
+# puts JSON.neat_generate(Scraper.parse_station_details(138964))
 

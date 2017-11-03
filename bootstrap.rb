@@ -3,6 +3,7 @@ require 'logger'
 require 'colorize'
 require 'neatjson'
 require 'google_maps_service'
+require 'parallel'
 require './scrape.rb'
 
 ###
@@ -70,6 +71,24 @@ end
 
 # end
 
+
+
+# seeds = [
+#   [37.775921, -122.415277],
+#   [37.756125, -122.469367],
+#   [37.680548, -122.477519],
+#   [37.694811, -122.416192],
+#   [37.654753, -122.423965],
+#   [37.590092, -122.384422],
+#   [37.550079, -122.320403],
+#   [37.501925, -122.259262],
+#   [37.613714, -122.060470],
+#   [37.676091, -122.107435],
+#   [37.742896, -122.179527],
+#   [37.775101, -122.197769],
+#   [37.813325, -122.264711]
+# ]
+
 def init_bootstrap_stations()
   # center = [37.4, -122.1]
   # coords = [37.297807, -122.541690] # pacific ocean
@@ -84,6 +103,16 @@ def init_bootstrap_stations()
   bootstrap_stations(coords)
 end
 
+# use oldstations.txt to populate bootstrap stations
+def oldstations_bootstrap()
+  MongoClient.open do |mc|
+    File.foreach("oldstations.txt") do |line|
+      sid = Integer(line.strip())
+      # puts JSON.neat_generate({_id: sid})
+      mc.insert_bootstrap_station({_id: sid})
+    end
+  end
+end
 
 def stations_from_bootstrap()
   # go through bootstrap_stations and parse station for each
@@ -95,7 +124,8 @@ def stations_from_bootstrap()
     end
   end
 
-  Scraper.parse_stations(stations)
+  # TODO clean up this function signature
+  Scraper.parse_stations(stations, false, false)
 
 end
 
@@ -107,23 +137,39 @@ def resample_bootstrap_stations()
     mc.stations.find.each do |doc|
       locations << [doc[:latitude], doc[:longitude]]
     end
+
+    radius = 0.01 # lat/long deg
+    n_samples = 5
+
+    Parallel.each(locations, in_threads: 8) do |center_lat, center_lng|
+      center_lat = Float(center_lat)
+      center_lng = Float(center_lng)
+
+      coords = random_coords(center_lat, center_lng, radius, n_samples)
+
+      # add center explicitly
+      coords << [center_lat, center_lng]
+
+      coords.each do |lat, lng|
+        res = Scraper.parse_nearby(lat, lng)
+
+        if res.any?
+          puts JSON.neat_generate(res).green
+          res.each do |sid|
+            mc.insert_bootstrap_station({_id: sid})
+          end
+        end
+
+      end
+    end
   end
-
-  radius = 0.01 # lat/long deg
-  n_samples = 10
-
-  locations.each do |center_lat, center_lng|
-    center_lat = Float(center_lat)
-    center_lng = Float(center_lng)
-
-    coords = random_coords(center_lat, center_lng, radius, n_samples)
-    bootstrap_stations(coords)
-  end
-
 end
+
+
 
 ####### 1
 # init_bootstrap_stations()
+# oldstations_bootstrap()
 
 ####### 2
 # stations_from_bootstrap()
@@ -132,3 +178,4 @@ end
 # resample_bootstrap_stations()
 
 # Repeat 2 and 3
+

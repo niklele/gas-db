@@ -33,6 +33,7 @@ GEM
       multi_json (~> 1.3)
       multi_xml (~> 0.5)
       rack (>= 1.2, < 3)
+    parallel (1.12.0)
     pg (0.20.0)
     pg (0.20.0-x86-mingw32)
     power_assert (1.0.2)
@@ -56,6 +57,7 @@ DEPENDENCIES
   mongo
   neatjson
   nokogiri
+  parallel
   pg
   rake
   sequel
