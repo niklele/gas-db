@@ -3,151 +3,196 @@ require 'nokogiri'
 require 'dotenv/load'
 require 'date'
 require 'time'
-require 'sequel'
 require 'uri'
-
-DB = Sequel.connect(ENV['DATABASE_URL'])
+require 'logger'
+require 'colorize'
+require 'neatjson'
+require 'parallel'
+require './mongo_client.rb'
 
 class Scraper
 
-  @fuel_type = {
-    'regular' => 'A',
-    'midgrade' => 'B',
-    'premium' => 'C',
-    'diesel' => 'D'
-  }
+  @n_threads = 8
 
-  def self.parseStation(name, location, station_id)
-    puts "scraping #{name} station in #{location} with id #{station_id}"
+  @logger = Logger.new(STDOUT)
+  @logger.level = Logger::DEBUG
+  @logger.progname = 'Scraper'
+  # TODO make a custom formatter that calls super, then colorizes based on log level
 
-    location = location.gsub('Redwood City', 'Redwood_City')
-    name = name.gsub(/ & /, '_-and-_')
-    url = URI.escape("http://www.sanfrangasprices.com/#{name}_Gas_Stations/#{location}/#{station_id}/index.aspx")
+  def self.parse_nearby(latitude, longitude)
 
+    @logger.info { "parsing nearby lat: #{latitude} lng: #{longitude}".yellow }
+
+    url = URI.escape("https://www.gasbuddy.com/Station/Nearby?lat=#{latitude}&lng=#{longitude}")
+    stations = JSON.parse(open(url).read)
+
+    # we can get a lot of fields from here, but we can't get all prices.
+    # Instead we will just get the ids for parse_station
+
+    # stations.each do |s|
+    #   s = s['Station']
+    #   station = {
+    #     :_id => s['Id'],
+    #     :name => s['Name'],
+    #     :lat => s['Lat'],
+    #     :lng => s['Lng'],
+    #     :city => s['City'],
+    #     :address => s['Address'],
+    #     :zip => s['ZipCode'],
+    #     :country => s['Country'],
+    #     :state => s['State'],
+    #     :phone => s['Phone'],
+    #     :rating => s['Rating']
+    #   }
+    #   puts JSON.neat_generate(station).green
+    # end
+
+    return stations.map { |s| s['Station']['Id'] }
+    # TODO figure out how to cleanly put these in the db
+  end
+
+  def self.parse_station_details(station_id)
+
+    @logger.info { "parsing station #{station_id}".yellow }
+
+    url = URI.escape("https://www.gasbuddy.com/Station/#{station_id}")
     page = Nokogiri::HTML(open(url))
 
-    info = page.xpath('//*[@id="spa_cont"]/div[1]/dl')
+    data = {}
 
-    data = Hash.new('')
+    data[:_id] = station_id
+    data[:name] = page.at_css('h2.station-name').text.strip
+    data[:phone] = page.at_css('div.station-phone').text.strip
 
-    data[:name] = info.css('dt').text.strip
-    address, phone = info.css('dd').text.split(/phone:/i)
-    data[:address] = address.strip
+    # TODO can i use this address even though it has the cross street?
+    # data[:address] = page.at_css('.station-address').text.strip
+    # data[:area] = page.at_css('.station-area').text.strip
 
-    if phone.nil?
-      data[:phone] = ''
-    else
-      data[:phone] = phone.strip
-    end
-
-    mapLink = page.xpath('//*[@id="spa_cont"]/div[1]/div[1]/a')[0]['href']
-    data[:lat] = Float(mapLink.match(/lat=(-?\d+.\d+)/).captures[0])
-    data[:long] = Float(mapLink.match(/long=(-?\d+.\d+)/).captures[0])
-
-    puts data
+    data[:latitude] = page.at_css('meta[itemprop=latitude]')['content']
+    data[:longitude] = page.at_css('meta[itemprop=longitude]')['content']
 
     begin
-      DB[:stations].insert(:station_id => station_id,
-                           :location => location,
-                           :name => data[:name],
-                           :address => data[:address],
-                           :phone => data[:phone])
-
-      # TODO put lat, long into db
-    rescue => e
-      puts e
-      # nothing
+      data[:rating] = page.at_css('meta[itemprop=ratingValue]')['content'].to_f
+      data[:rating_count] = page.at_css('div[itemprop=reviewCount] > span').text.to_i
+    rescue Exception => err
+      @logger.warn { "Cannot get rating from #{station_id} | #{err}".red }
+      data[:rating] = 0
+      data[:rating_count] = 0
     end
 
+    data[:features] = page.css('div.station-feature').map do |e|
+      {
+        :name => e['title'],
+        :image_url => URI.escape(/'(.*)\?/.match(e['style'])[1]) # get just url
+      }
+    end
+    return data
   end
 
-  def self.parseLocation(location, fuel)
+  def self.parse_station_prices(station_id)
+    @logger.info { "parsing station #{station_id} for prices".yellow }
 
-    puts "scraping prices in #{location} for #{fuel} fuel"
-
-    type = @fuel_type[fuel]
-
-    url = URI.escape("http://www.sanfrangasprices.com/GasPriceSearch.aspx?fuel=#{type}&typ=adv&srch=1&state=CA&area=#{location}&site=SanFran,SanJose,California&tme_limit=4")
-
+    url = URI.escape("https://www.gasbuddy.com/Station/#{station_id}")
     page = Nokogiri::HTML(open(url))
-    rows = page.xpath('//*[@id="pp_table"]/table/tbody/tr')
 
-    collected = Time.now
+    price_boxes = page.xpath('//*[@id="prices"]/div/div')
 
-    rows.each do |row|
+    prices = price_boxes.flat_map do |box|
+      [self.parse_price_box(station_id, box, 'cash'),
+        self.parse_price_box(station_id, box, 'credit')]
+    end
 
-      if row.css('.address').css('a').first['href'].match(/redirect/i)
-        puts "skipping station with a redirect"
-        next
-      end
+    # remove nil
+    prices = prices.compact()
+    # TODO return nulls in a better way
 
-      if row.css('.address').css('a').first['href'].match(/FUEL/)
-        puts "skipping FUEL 24:7 station with a bad URL"
-        next
-      end
+    return prices
+  end
 
-      data = Hash.new('')
+  def self.parse_price_box(station_id, type_box, payment_type)
+    box = type_box.at_css("div.bottom-buffer-sm.#{payment_type}-box")
+    price = box.at_css('div.price-display').text.to_f
 
-      p_price = row.css('.p_price')
-      data[:price] = Float(p_price.text)
-      data[:station_id] = Integer(p_price[0]['id'].split('_').last)
+    # check that we have a real price and not just '---'
+    if price > 0
+      return {
+        :station_id => station_id,
+        :fuel_type => type_box.at_css('h4.fuel-type.section-title').text.downcase,
+        :payment_type => payment_type,
+        :price => price,
+        :user => box.at_css('span.memberId').text,
+        :reported => box.at_css('div.price-time').text
+      }
+    end
+  end
 
-      address = row.css('.address')
-      data[:name] = address.css('a').text.strip
-      data[:address] = address.css('dd').text.strip
+  def self.parse_time_ago(curr_time, time_ago)
+    # parse a string like "3m ago" to a Time object
+    t = time_ago.split(' ')[0]
+    prefix = t[0..-2].to_i
+    suffix = t[-1]
+    if suffix == 'm'
+      return curr_time - prefix
+    elsif suffix == 'h'
+      return curr_time - (prefix * 60)
+    elsif suffix == 'd'
+      return curr_time - (prefix * 1440) # 24 * 60
+    else
+      @logger.warn { "Error parsing time ago: #{time_ago}".red }
+      return curr_time
+    end
+  end
 
-      address = row.css('.address')
-      data[:name] = address.css('a').text.strip
-      data[:address] = address.css('dd').text.strip
+  def self.parse_stations(stations, use_local_db=false, parse_prices=true)
+    MongoClient.open(use_local_db) do |mc|
 
-      data[:user] = row.css('.mem').text.strip
-      data[:reported] = DateTime.parse(row.css('.tm')[0]['title']).to_time
+      t = Time.new
 
-      puts data
+      Parallel.each(stations, in_threads: @n_threads) do |sid|
+        station_details = self.parse_station_details(sid)
+        # puts JSON.neat_generate(station_details).green
 
-      noStation = false
-      tries = 0
-      begin
-        DB.transaction do
-          if (DB[:stations].where(:station_id => data[:station_id]).count < 1)
-              noStation = true
-              tries += 1
+        if mc.station_exists? sid
+          mc.update_station(sid, station_details)
+        else
+          mc.insert_station(station_details)
+        end
 
-              # rate limiting
-              sleep(0.5)
-
-              parseStation(data[:name], location, data[:station_id])
-              
+        if parse_prices
+          prices = self.parse_station_prices(sid)
+          prices.each do |p|
+            p[:collected] = t
+            p[:reported] = self.parse_time_ago(t, p[:reported])
           end
 
-          DB[:prices].insert(:station_id => data[:station_id],
-                             :collected => collected,
-                             :reported => data[:reported],
-                             :type => fuel, # real name not A/B/C/D
-                             :price => data[:price],
-                             :user => data[:user])
-        end
-
-      rescue => e
-        puts e
-        if tries > 0
-          next
-        elsif noStation
-          retry
+          mc.insert_many_prices( prices )
+          # puts JSON.neat_generate(prices).blue
         end
 
       end
     end
-
   end
 
-  def self.scrape(locations)
-    locations.each do |loc|
-      @fuel_type.keys.each do |fuel|
-      parseLocation(loc, fuel)
-      sleep(0.5) # rate limiting
+  def self.scrape
+    stations = []
+    MongoClient.open do |mc|
+      mc.stations.find.each do |doc|
+        stations << doc[:_id]
       end
     end
+
+    Scraper.parse_stations(stations)
   end
 
 end
+
+# Scraper.parse_stations([11236, 5443, 5024], true, true)
+
+# Scraper.parse_station 12361
+# Scraper.parse_station 5443
+# Scraper.parse_station 5024
+
+# puts Scraper.parse_nearby(37.380875, -122.074536)
+
+# puts JSON.neat_generate(Scraper.parse_station_details(138964))
+
