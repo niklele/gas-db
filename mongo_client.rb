@@ -32,6 +32,9 @@ class MongoClient
   end
 
   def initialize(use_local_client=false)
+    # Turn off debug-mode
+    Mongo::Logger.logger.level = Logger::INFO # DEBUG
+
     @logger = Logger.new(STDOUT)
     @logger.level = Logger::DEBUG
     @logger.progname = 'MongoClient'

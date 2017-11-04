@@ -12,6 +12,8 @@ require './mongo_client.rb'
 
 class Scraper
 
+  @n_threads = 8
+
   @logger = Logger.new(STDOUT)
   @logger.level = Logger::DEBUG
   @logger.progname = 'Scraper'
@@ -73,7 +75,9 @@ class Scraper
       data[:rating] = page.at_css('meta[itemprop=ratingValue]')['content'].to_f
       data[:rating_count] = page.at_css('div[itemprop=reviewCount] > span').text.to_i
     rescue Exception => err
-       @logger.warn { "Cannot get rating from #{station_id} | #{err}".red }
+      @logger.warn { "Cannot get rating from #{station_id} | #{err}".red }
+      data[:rating] = 0
+      data[:rating_count] = 0
     end
 
     data[:features] = page.css('div.station-feature').map do |e|
@@ -139,14 +143,12 @@ class Scraper
     end
   end
 
-
-  # TODO use a queue of station_ids to scrape
   def self.parse_stations(stations, use_local_db=false, parse_prices=true)
     MongoClient.open(use_local_db) do |mc|
 
       t = Time.new
 
-      Parallel.each(stations, in_threads: 8) do |sid|
+      Parallel.each(stations, in_threads: @n_threads) do |sid|
         station_details = self.parse_station_details(sid)
         # puts JSON.neat_generate(station_details).green
 
@@ -169,6 +171,17 @@ class Scraper
 
       end
     end
+  end
+
+  def self.scrape
+    stations = []
+    MongoClient.open do |mc|
+      mc.stations.find.each do |doc|
+        stations << doc[:_id]
+      end
+    end
+
+    Scraper.parse_stations(stations)
   end
 
 end
