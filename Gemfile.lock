@@ -22,6 +22,7 @@ GEM
     multi_json (1.12.1)
     multi_xml (0.6.0)
     multipart-post (2.0.0)
+    mustermann (1.0.1)
     neatjson (0.8.3)
     nokogiri (1.7.2)
       mini_portile2 (~> 2.1.0)
@@ -38,11 +39,19 @@ GEM
     pg (0.20.0-x86-mingw32)
     power_assert (1.0.2)
     rack (2.0.3)
+    rack-protection (2.0.0)
+      rack
     rake (12.0.0)
     retriable (2.1.0)
     sequel (4.46.0)
+    sinatra (2.0.0)
+      mustermann (~> 1.0)
+      rack (~> 2.0)
+      rack-protection (= 2.0.0)
+      tilt (~> 2.0)
     test-unit (3.2.3)
       power_assert
+    tilt (2.0.8)
 
 PLATFORMS
   ruby
@@ -61,6 +70,7 @@ DEPENDENCIES
   pg
   rake
   sequel
+  sinatra
   test-unit
 
 BUNDLED WITH
