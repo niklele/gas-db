@@ -71,24 +71,6 @@ end
 
 # end
 
-
-
-# seeds = [
-#   [37.775921, -122.415277],
-#   [37.756125, -122.469367],
-#   [37.680548, -122.477519],
-#   [37.694811, -122.416192],
-#   [37.654753, -122.423965],
-#   [37.590092, -122.384422],
-#   [37.550079, -122.320403],
-#   [37.501925, -122.259262],
-#   [37.613714, -122.060470],
-#   [37.676091, -122.107435],
-#   [37.742896, -122.179527],
-#   [37.775101, -122.197769],
-#   [37.813325, -122.264711]
-# ]
-
 def init_bootstrap_stations()
   # center = [37.4, -122.1]
   # coords = [37.297807, -122.541690] # pacific ocean
@@ -110,6 +92,53 @@ def oldstations_bootstrap()
       sid = Integer(line.strip())
       # puts JSON.neat_generate({_id: sid})
       mc.insert_bootstrap_station({_id: sid})
+    end
+  end
+end
+
+$seeds = [
+  [37.258594, -122.017908],
+  [37.312663, -121.865138],
+  [37.268587, -121.852067],
+  [37.249484, -121.812025],
+  [37.307207, -121.783772],
+  [37.345721, -121.806501],
+  [37.403268, -121.863390],
+  [37.468917, -121.913911],
+  [37.573620, -122.040585],
+  [37.769889, -122.253065],
+  [37.817572, -122.264773],
+  [37.823545, -122.225898],
+  [37.848447, -122.265155],
+  [37.882748, -122.275321],
+  [37.759735, -122.411997],
+  [37.785172, -122.424965],
+  [37.796840, -122.406784],
+  [37.782505, -122.466148],
+  [37.774424, -122.488714],
+  [37.750893, -122.483721]
+]
+
+def seeds_bootstrap()
+
+  radius = 0.02
+  n_samples = 30
+  MongoClient.open do |mc|
+    $seeds.each do |lat, lng|
+
+      coords = random_coords(lat, lng, radius, n_samples)
+      Parallel.each(coords, in_threads: 8) do |lat, lng|
+        res = Scraper.parse_nearby(lat, lng)
+
+        if res.any?
+          puts JSON.neat_generate(res).green
+          res.each do |sid|
+            mc.insert_bootstrap_station({_id: sid})
+          end
+        end
+
+      end
+
     end
   end
 end
@@ -170,6 +199,7 @@ end
 ####### 1
 # init_bootstrap_stations()
 # oldstations_bootstrap()
+# seeds_bootstrap()
 
 ####### 2
 # stations_from_bootstrap()
