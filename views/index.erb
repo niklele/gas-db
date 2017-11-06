@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>gas-db</title>
+  </head>
+  <body>
+    <div id=content>
+      <p>Average prices:</p>
+      <p>regular cash: $<%= '%.2f' % averages[:regular_cash][:avg_price] %> with <%= averages[:regular_cash][:count] %> datapoints</p>
+      <p>regular credit: $<%= '%.2f' % averages[:regular_credit][:avg_price] %> with <%= averages[:regular_credit][:count] %> datapoints</p>
+
+      <p>midgrade cash: $<%= '%.2f' % averages[:midgrade_cash][:avg_price] %> with <%= averages[:midgrade_cash][:count] %> datapoints</p>
+      <p>midgrade credit: $<%= '%.2f' % averages[:midgrade_credit][:avg_price] %> with <%= averages[:midgrade_credit][:count] %> datapoints</p>
+
+      <p>premium cash: $<%= '%.2f' % averages[:premium_cash][:avg_price] %> with <%= averages[:premium_cash][:count] %> datapoints</p>
+      <p>premium credit: $<%= '%.2f' % averages[:premium_credit][:avg_price] %> with <%= averages[:premium_credit][:count] %> datapoints</p>
+
+      <p>diesel cash: $<%= '%.2f' % averages[:diesel_cash][:avg_price] %> with <%= averages[:diesel_cash][:count] %> datapoints</p>
+      <p>diesel credit: $<%= '%.2f' % averages[:diesel_credit][:avg_price] %> with <%= averages[:diesel_credit][:count] %> datapoints</p>
+
+    </div>
+  </body>
+</html>

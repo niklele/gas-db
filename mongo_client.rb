@@ -47,6 +47,14 @@ class MongoClient
       @db[:prices].indexes.create_one(station_id: Mongo::Index::ASCENDING)
       # TODO indeces on reported, collected, price
 
+      # unique index on price
+      @db[:prices].indexes.create_one({station_id: 1,
+                                      fuel_type: 1,
+                                      payment_type: 1,
+                                      price: 1,
+                                      reported: 1},
+                                      {unique: true, drop_dups: true})
+
     rescue Exception => err
       @logger.fatal { "#{err}".red }
     end
@@ -71,6 +79,20 @@ class MongoClient
 
   def station_exists?(station_id)
     return @db[:stations].count( :_id => station_id ) > 0
+  end
+
+  def average_price_by_type()
+    # avg_image_search_time = @coll.aggregate([ {"$group" => {"_id"=>"$type", "avg"=> {"$avg"=>"$time_elapsed"}}}, {"$match" => {"_id"=>"image_search"}} ]).first['avg']
+
+    # group by fuel type and payment type
+    group = {
+      '$group': {
+        _id: { "fuel_type": "$fuel_type", "payment_type": "$payment_type" },
+        avg_price: { "$avg": "$price" }, # take the average of each "price" and return it as "avg_price"
+        count: { "$sum": 1 } # count number of each
+      }
+    }
+    return @db[:prices].aggregate([group])
   end
 
   # def station_data_ok?(data)
@@ -197,7 +219,7 @@ end
 
 def test_mongo_client()
 
-  MongoClient.open(true) do |mc|
+  MongoClient.open(false) do |mc|
 
     # TODO test with multiple price records
 
@@ -217,9 +239,13 @@ def test_mongo_client()
     # mc.print_all_stations
 
     # mc.delete_station 999999999
-    mc.print_all_stations
+    # mc.print_all_stations
 
     # mc.delete_price 1
+
+    mc.average_price_by_type.each do |x|
+      puts JSON.neat_generate(x)
+    end
 
   end
 end
