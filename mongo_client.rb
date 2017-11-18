@@ -81,18 +81,70 @@ class MongoClient
     return @db[:stations].count( :_id => station_id ) > 0
   end
 
+  def most_recent_prices()
+
+    # separate each station
+    # sort by reported time
+    # take the last one
+
+    # return @db[:prices].aggregate([
+    #   {'$group': {
+    #     _id: { station_id: "$station_id", fuel_type: "$fuel_type", payment_type: "$payment_type" }
+    #   }},
+    #   {'$sort': {
+    #     _id: { reported: 1 }
+    #   }},
+    #   {'$group': {
+    #     _id: '$_id',
+    #     doc: { '$last': '$$ROOT' }
+    #   }}
+    # ])
+
+    res = @db[:prices].aggregate([
+      {'$sort': { station_id: 1, reported: 1 }}, 
+      {'$limit': 100 },
+      {'$group': {
+        _id: { station_id: "$station_id" },
+        doc: { '$push': '$$ROOT' }
+      }}
+    ])
+
+    return res
+  end
+
   def average_price_by_type()
     # avg_image_search_time = @coll.aggregate([ {"$group" => {"_id"=>"$type", "avg"=> {"$avg"=>"$time_elapsed"}}}, {"$match" => {"_id"=>"image_search"}} ]).first['avg']
 
-    # group by fuel type and payment type
-    group = {
+    # take the most recent price from each type for each station before averaging
+    sort = {
+      '$sort': { 'station_id': 1, 'collected': 1, 'reported': 1 }
+    }
+
+    station_group = {
       '$group': {
-        _id: { "fuel_type": "$fuel_type", "payment_type": "$payment_type" },
-        avg_price: { "$avg": "$price" }, # take the average of each "price" and return it as "avg_price"
-        count: { "$sum": 1 } # count number of each
+        _id: ''
       }
     }
-    return @db[:prices].aggregate([group])
+
+    # group by fuel type and payment type
+    typeGroup = {
+      '$group': {
+        _id: { "fuel_type": "$fuel_type", "payment_type": "$payment_type" },
+        total_count: { "$sum": 1 }, # count number of each
+        most_recent_price_time: { '$last': '$reported' },
+        avg_price: { "$avg": "$most_recent_price" } # take the average of each "most_recent_price" and return it as "avg_price"
+      }
+    }
+
+    # statsGroup = {
+    #   '$group': {
+    #     _id: { "fuel_type": "$fuel_type", "payment_type": "$payment_type" },
+    #     avg_price: { "$avg": "$most_recent_price" } # take the average of each "most_recent_price" and return it as "avg_price"
+    #   }
+    # }
+
+
+    return @db[:prices].aggregate([sort, typeGroup])
   end
 
   # def station_data_ok?(data)
@@ -116,11 +168,19 @@ class MongoClient
 
   def insert(collection, data)
     begin
-      collection.insert_one(data)
+      @db[collection].insert_one(data)
     rescue Exception => err
-      @logger.warn { "Cannot insert to #{collection.namespace} | #{err}".red }
+      @logger.warn { "Cannot insert to #{@db[collection].namespace} | #{err}".red }
     end
   end
+
+  # def insert(collection, data)
+  #   begin
+  #     collection.insert_one(data)
+  #   rescue Exception => err
+  #     @logger.warn { "Cannot insert to #{collection.namespace} | #{err}".red }
+  #   end
+  # end
 
   def insert_many(collection, data)
     begin
@@ -130,44 +190,53 @@ class MongoClient
     end
   end
 
-  def insert_station(data) insert(@db[:stations], data) end
-  def insert_bootstrap_station(data) insert(@db[:bootstrap_stations], data) end
-  def insert_price(data) insert(@db[:prices], data) end
-  def insert_many_prices(data) insert_many(@db[:prices], data) end
+  def insert_station(data) insert(:stations, data) end
+  def insert_bootstrap_station(data) insert(:bootstrap_stations, data) end
+  def insert_price(data) insert(:prices, data) end
+  def insert_many_prices(data) insert_many(:prices, data) end
 
   def update(collection, id, update)
     # update is the mongo update statement
     begin
-      collection.find_one_and_update({ _id: id}, update)
+      @db[collection].find_one_and_update({ _id: id}, update)
     rescue Exception => err
-      @logger.warn { "Cannot update #{collection.namespace} id: #{id} | #{err}".red }
+      @logger.warn { "Cannot update #{@db[collection].namespace} id: #{id} | #{err}".red }
     end
   end
 
-  def update_station(id, update) update(@db[:stations], id, update) end
+  def update_station(id, update) update(:stations, id, update) end
   # def update_price(id, update) update(@db[:prices], id, update) end
 
   def delete(collection, id)
     begin
-      collection.find_one_and_delete({ _id: id})
+      @db[collection].find_one_and_delete({ _id: id})
     rescue Exception => err
-      @logger.warn { "Cannot delete #{collection.namespace} id: #{id} | #{err}".red }
+      @logger.warn { "Cannot delete #{@db[collection].namespace} id: #{id} | #{err}".red }
     end
   end
 
-  def delete_station(id) delete(@db[:stations], id) end
-  def delete_price(id) delete(@db[:prices], id) end
+  def delete_old_prices(threshold)
+    # delete prices collected before the threshold
+    begin
+      @db[:prices].delete_many({collected: {"$lte": threshold} })
+    rescue Exception => err
+      @logger.warn { "Cannot delete old prices | #{err}".red }
+    end
+  end
+
+  def delete_station(id) delete(:stations, id) end
+  def delete_price(id) delete(:prices, id) end
 
   def delete_all(collection)
     begin
-      collection.delete_many()
+      @db[collection].delete_many()
     rescue Exception => err
-      @logger.warn { "Cannot delete all from #{collection.namespace} | #{err}".red }
+      @logger.warn { "Cannot delete all from #{@db[collection].namespace} | #{err}".red }
     end
   end
 
-  def delete_all_stations() delete_all(@db[:stations]) end
-  def delete_all_prices() delete_all(@db[:prices]) end
+  def delete_all_stations() delete_all(:stations) end
+  def delete_all_prices() delete_all(:prices) end
 
   def set_station_working(station_id, working)
     # set 'working' var
